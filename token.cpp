@@ -84,6 +84,36 @@ bool match1(const vector<string> & lines, Loc & progress, Token & token,
 	}
 }
 
+bool match22(const vector<string> & lines, Loc & progress, Token & token, 
+	const string & startChars, const string & endChars, const string & type)
+{
+	Loc oldProgress = progress;
+	token.start = progress;
+	string text = nextChars(lines, progress, startChars.size());
+	token.text = text;
+	if (text != startChars) {
+		progress = oldProgress;
+		return false;
+	}
+	//if (text == "/*") cout << "+";
+	int size2 = endChars.size();
+	while (true) {
+		token.end = progress;
+		string text2 = nextChars(lines, progress, size2);
+		if (text2.size() == 0) {
+			progress = oldProgress;
+			return false;
+		}
+		progress = token.end;
+		if (text2 == endChars) {
+			token.type = type;
+			return true;
+		}
+		int c = nextChar(lines, progress);
+		token.text += (char)c;
+	}
+}
+
 bool match2(const vector<string> & lines, Loc & progress, Token & token, 
 	const string & startChars, const string & endChars, const string & escape, const string & type)
 {
@@ -99,6 +129,7 @@ bool match2(const vector<string> & lines, Loc & progress, Token & token,
 	int size1 = escape.size();
 	int size2 = endChars.size();
 	while (true) {
+		token.end = progress;
 		int c = nextChar(lines, progress);
 		if (progress.ch == -1) {
 			progress = oldProgress;
@@ -321,7 +352,7 @@ bool matchComment1(const vector<string> & lines, Loc & progress, Token & token) 
 }
 
 bool matchComment2(const vector<string> & lines, Loc & progress, Token & token) {
-	return match2(lines, progress, token, "//", "\n", "", "comment");
+	return match22(lines, progress, token, "//", "\n", "comment");
 }
 
 bool matchSpaces(const vector<string> & lines, Loc & progress, Token & token) {
@@ -336,12 +367,8 @@ bool matchLines(const vector<string> & lines, Loc & progress, Token & token) {
 	return match1(lines, progress, token, "\n", "\n", "lines");
 }
 
-bool matchInclude1(const vector<string> & lines, Loc & progress, Token & token) {
-	return match2(lines, progress, token, "#include", ">", "", "include");
-}
-
-bool matchInclude2(const vector<string> & lines, Loc & progress, Token & token) {
-	return match2(lines, progress, token, "#include", "\"", "", "include");
+bool matchInclude(const vector<string> & lines, Loc & progress, Token & token) {
+	return match22(lines, progress, token, "#include", "\n", "include");
 }
 
 vector<Token> getTokens(const vector<string> & lines) {
@@ -361,8 +388,7 @@ vector<Token> getTokens(const vector<string> & lines) {
 			matchSpaces(lines, progress, token) or
 			matchTabs(lines, progress, token) or
 			matchLines(lines, progress, token) or
-			matchInclude1(lines, progress, token) or
-			matchInclude2(lines, progress, token) or
+			matchInclude(lines, progress, token) or
 			matchAny(lines, progress, token, "lex_error")) {
 			tokens.push_back(token);
 		}

@@ -155,8 +155,6 @@ void readFile(const char filename[]) {
 }
 
 int main() {
-	readFile("9.18.txt");
-	readFile("9.21-27.txt");
-	readFile("12.18.txt");
-	readFile("12.21-27.txt");
+	readFile("9-11.txt");
+	readFile("12-11.txt");
 }

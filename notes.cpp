@@ -4,7 +4,7 @@
 using namespace std;
 
 int indentation = 0;
-bool oneMoreIndentation = false;
+int moreIndentation = 0;
 
 void addErrorNote(vector<Token> & notes, int indents, const Token & token, const string & error) {
 	Token errorToken;
@@ -14,7 +14,7 @@ void addErrorNote(vector<Token> & notes, int indents, const Token & token, const
 	if (spaces > 0) {
 		for (int i = 0; i < spaces; ++ i) errorToken.text += "&nbsp;";
 	}
-	errorToken.text += "^ " + error + "<br>";
+	errorToken.text += error + "<br>";
 	notes.push_back(errorToken);
 }
 
@@ -22,7 +22,7 @@ int getIndentationChanges1(vector<Token> & line) {
 	int changes = 0;
 	if (line[0].text == "}" || (line[0].type == "tabs" and line[1].text == "}")) -- changes;
 	for (int i = 0; i < line.size(); ++ i) {
-		if (line[i].text == "{") oneMoreIndentation = false;
+		if (line[i].text == "{") moreIndentation = 0;
 	}
 	return changes;
 }
@@ -37,11 +37,12 @@ int getIndentationChanges2(vector<Token> & line) {
 	for (int i = 0; i < line.size(); ++ i) {
 		if (find(LOOP_KEY, 5, line[i].text) != -1) isLoop = true;
 	}
-	if (isLoop && line[line.size() - 2].text != ";") oneMoreIndentation = true;
+	if (isLoop && line[line.size() - 2].text != ";") ++ moreIndentation;
+	else moreIndentation = 0;
 	for (int i = 0; i < line.size(); ++ i) {
 		if (line[i].text == "}") -- changes;
 		if (line[i].text == "{") {
-			oneMoreIndentation = false;
+			moreIndentation = 0;
 			++ changes;
 		}
 	}
@@ -111,6 +112,19 @@ string LEFT_RIGHT[] = {
 	":",
 };
 
+bool check(vector<string> & vec, const string & text) {
+	bool has = false;
+	for (int i = 0; i < vec.size(); ++ i) {
+		if (vec[i] == text) {
+			has = true;
+			break;
+		}
+	}
+	if (has) return true;
+	vec.push_back(text);
+	return false;
+}
+
 void processLine(vector<Token> & line, vector<Token> & prevLine, vector<Token> & notes) {
 	// decomposition
 	bool isFunc = isFunction(line);
@@ -124,9 +138,8 @@ void processLine(vector<Token> & line, vector<Token> & prevLine, vector<Token> &
 		//cout << curLine << "-" << prevFuntionLine << endl;
 	}
 
-	// indentation
-	int indentation2 = indentation + getIndentationChanges1(line) + (oneMoreIndentation ? 1 : 0);
-	oneMoreIndentation = false;
+	// indentatio
+	int indentation2 = indentation + getIndentationChanges1(line) + moreIndentation;
 	int indentation1 = getIndentation(line);
 	if (indentation2 != indentation1) {
 		stringstream ss;
@@ -141,41 +154,68 @@ void processLine(vector<Token> & line, vector<Token> & prevLine, vector<Token> &
 	if (isFunc && prevLine.size() > 0) {
 		if (prevLine[0].type != "comment") {
 			addErrorNote(notes, indentation1, line[0], "函数前建议写注释.");
-			if (prevLine[prevLine.size() - 1].text.length() < 2) {
+			if (prevLine.size() > 1 && prevLine[prevLine.size() - 1].text.length() < 2) {
 				addErrorNote(notes, indentation1, line[0], "函数要有空行.");
 			}
 		}
 	}
 
 	// spaces
+	vector<string> opHas;
 	for (int i = 0; i < line.size(); ++ i) {
 		if (line[i].type != "operator") continue;
 		bool leftRight = (find(LEFT_RIGHT, 30, line[i].text) != -1);
 		bool right = (find(RIGHT, 4, line[i].text) != -1);
 		bool left = (find(LEFT, 5, line[i].text) != -1);
+		bool missLeft = false;
+		bool missRight = false;
 		if (left) { 
-			if (i > 0 && line[i - 1].text != "(" && line[i - 1].type != "spaces" && line[i - 1].type != "tabs" && line[i - 1].type != "id") {
-				addErrorNote(notes, indentation1, line[i], "操作符左边应有空格.");
+			if (i > 0 && line[i - 1].text != "(" && line[i - 1].text != "." && line[i - 1].type != "spaces" && line[i - 1].type != "tabs" && line[i - 1].type != "id") {
+				missLeft = true;
 			}
 		}
 		if (leftRight) { 
 			if (i > 0 && line[i - 1].text != "(" && line[i - 1].type != "spaces" && line[i - 1].type != "tabs") {
-				addErrorNote(notes, indentation1, line[i], "操作符左边应有空格.");
+				missLeft = true;
 			}
 		}
 		if (leftRight || right) {
-			if (i < line.size() - 1 && line[i + 1].text != ")" && line[i + 1].text != ";" && line[i + 1].text != "," && line[i + 1].type != "lines" && line[i + 1].type != "spaces") {
-				addErrorNote(notes, indentation1, line[i], "操作符右边应有空格.");
+			if (i < line.size() - 1 && line[i + 1].text != ")" && line[i + 1].text != "." && line[i + 1].text != ";" && line[i + 1].text != "," && line[i + 1].type != "lines" && line[i + 1].type != "spaces") {
+				missRight = true;
+			}
+		}
+		if (missLeft && missRight) {
+			if (! check(opHas, line[i].text))
+				addErrorNote(notes, indentation1, line[i], line[i].text + " 左右应有空格.");
+		}
+		else {
+			if (missLeft) {
+				if (! check(opHas, line[i].text))
+					addErrorNote(notes, indentation1, line[i], line[i].text + " 左边应有空格.");
+			}
+			else if (missRight) {
+				if (! check(opHas, line[i].text))
+					addErrorNote(notes, indentation1, line[i], line[i].text + " 右边应有空格.");
 			}
 		}
 	}
 
 	// variable names
+	vector<string> idHas;
 	for (int i = 0; i < line.size(); ++ i) {
 		if (line[i].type == "id") {
 			if (line[i].text.length() > 1) continue;
 			if (line[i].text != "i" && line[i].text != "j" && line[i].text != "k") {
-				addErrorNote(notes, indentation1, line[i], "建议使用有意义的变量名.");
+				bool isDef = false;
+				for (int j = 0; j < i; ++ j) {
+					if (line[j].text == "int" || line[j].text == "char" || line[j].text == "float" || line[j].text == "double") {
+						isDef = true;
+						break;
+					}
+				}
+				if (isDef && ! check(idHas, line[i].text)) {
+					addErrorNote(notes, indentation1, line[i], line[i].text + " 建议使用有意义的变量名.");
+				}
 			}
 		}
 	}
@@ -184,7 +224,7 @@ void processLine(vector<Token> & line, vector<Token> & prevLine, vector<Token> &
 
 vector<Token> addNotes(vector<Token> & tokens) {
 	indentation = 0;
-	oneMoreIndentation = false;
+	moreIndentation = 0;
 	prevFuntionLine = 0;
 	vector<Token> notes;
 	vector<Token> prevLine;
